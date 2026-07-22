@@ -1,17 +1,17 @@
 /**
  * TypingMind Extension: Auto Action Hook
  * Author: CaptainKousto
- * Version: 5.0
+ * Version: 5.1
  */
 
-console.log('[AutoActionHook] Script loaded. Initializing v5.0...');
+console.log('[AutoActionHook] Script loaded. Initializing v5.1...');
 
 (function() {
   'use strict';
 
   const STORAGE_KEY = 'auto_action_hook_settings';
   const DEFAULT_SETTINGS = {
-    approvalMode: 'disabled', // Defaults to disabled for safety
+    approvalMode: 'disabled',
     triggerText: '[NEEDS_APPROVAL]',
     autoResponseText: 'Yes, approved. Please continue.'
   };
@@ -146,14 +146,12 @@ console.log('[AutoActionHook] Script loaded. Initializing v5.0...');
       setNativeValue(textarea, settings.autoResponseText);
       
       setTimeout(() => {
-        // Essai 1 : Cliquer sur le bouton d'envoi
         const sendButton = document.querySelector('button[data-element-id="send-chat-message-button"]') || 
                            document.querySelector('button[aria-label*="Send"]');
         if (sendButton && !sendButton.disabled) {
           sendButton.click();
           console.log('[AutoActionHook] Auto-response sent via click.');
         } else {
-          // Essai 2 : Simuler la touche Entrée si le bouton n'est pas trouvé ou désactivé
           const enterEvent = new KeyboardEvent('keydown', {
             key: 'Enter',
             code: 'Enter',
@@ -165,36 +163,41 @@ console.log('[AutoActionHook] Script loaded. Initializing v5.0...');
           textarea.dispatchEvent(enterEvent);
           console.log('[AutoActionHook] Auto-response sent via Enter key.');
         }
-      }, 200); // Délai légèrement augmenté pour s'assurer que React a mis à jour l'état du bouton
+      }, 200);
     }
   }
 
+  // Nouvelle fonction pour extraire le texte visible sans le bloc de réflexion
+  function getActualResponseText(element) {
+    const clone = element.cloneNode(true);
+    const thinkingBlock = clone.querySelector('[data-element-id="thinking-block"]');
+    if (thinkingBlock) {
+      thinkingBlock.remove();
+    }
+    return clone.textContent.trim();
+  }
+
   function checkForTrigger() {
-    // Ne rien faire si le mode est désactivé ou manuel
     if (settings.approvalMode === 'disabled' || settings.approvalMode === 'manual') return;
-    
-    // Ne rien faire si le texte déclencheur est vide
     if (!settings.triggerText || settings.triggerText.trim() === '') return;
 
-    // 1. Ne rien faire si le LLM est encore en train d'écrire (bouton Stop visible)
     const stopBtn = document.querySelector('button[data-element-id="stop-generating-button"]');
     if (stopBtn) return;
 
-    // 2. Cibler EXCLUSIVEMENT les réponses de l'IA (et non les messages utilisateur)
     const allAiResponses = document.querySelectorAll('[data-element-id="ai-response"]');
     if (allAiResponses.length === 0) return;
 
-    // 3. Prendre le tout dernier message de l'IA
     const lastMsg = allAiResponses[allAiResponses.length - 1];
     if (!lastMsg) return;
 
-    // 4. Éviter de traiter le même message plusieurs fois
     if (lastMsg.dataset.aahProcessed === 'true') return;
 
-    // 5. Vérifier si le texte contient le déclencheur
-    if (lastMsg.textContent.includes(settings.triggerText)) {
+    // Utilisation de la nouvelle fonction pour exclure le thinking-block
+    const actualText = getActualResponseText(lastMsg);
+    
+    if (actualText.includes(settings.triggerText)) {
       lastMsg.dataset.aahProcessed = 'true';
-      console.log('[AutoActionHook] Trigger detected:', settings.triggerText);
+      console.log('[AutoActionHook] Trigger detected in actual response:', settings.triggerText);
       setTimeout(triggerAutoResponse, 500);
     }
   }
