@@ -10,13 +10,14 @@
 
   const STORAGE_KEY = 'auto_action_hook_settings';
   const DEFAULT_SETTINGS = {
-    approvalMode: 'manual', // Defaults to manual. Change to 'auto' or 'ignore' in the UI.
+    approvalMode: 'manual',
     triggerText: '[NEEDS_APPROVAL]',
     autoResponseText: 'Yes, approved. Please continue.'
   };
 
   let settings = loadSettings();
   let observer = null;
+  let uiObserver = null;
 
   function loadSettings() {
     try {
@@ -44,61 +45,90 @@
     style.textContent = `
       .aah-modal-overlay {
         position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(0, 0, 0, 0.5); z-index: 99999;
+        background: rgba(0, 0, 0, 0.5); z-index: 99999; backdrop-filter: blur(4px);
         display: flex; align-items: center; justify-content: center;
       }
       .aah-modal {
-        background: #1f2937; color: #fff;
-        padding: 20px; border-radius: 8px; width: 400px; max-width: 90%;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        background-color: rgb(39, 39, 42); color: white;
+        width: 100%; max-width: 32rem; max-height: 90vh;
+        border-radius: 0.5rem; padding: 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        z-index: 100000;
+        overflow-y: auto;
       }
-      .aah-modal h2 { margin-top: 0; font-size: 1.2rem; }
-      .aah-form-group { margin-bottom: 15px; }
-      .aah-form-group label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 0.9rem; }
+      .aah-modal h2 { margin-top: 0; font-size: 1.25rem; font-weight: 600; margin-bottom: 1.5rem; }
+      .aah-form-group { margin-bottom: 1rem; }
+      .aah-form-group label { display: block; margin-bottom: 0.5rem; font-size: 0.875rem; font-weight: 500; color: #d4d4d8; }
       .aah-form-group input, .aah-form-group select {
-        width: 100%; padding: 8px; border: 1px solid #444; border-radius: 4px;
-        background: #111827; color: #fff;
-        box-sizing: border-box;
+        width: 100%; padding: 0.5rem 0.75rem; 
+        background-color: rgb(63, 63, 70); border: 1px solid rgb(82, 82, 91); color: white;
+        border-radius: 0.375rem; box-sizing: border-box;
       }
-      .aah-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+      .aah-form-group input:focus, .aah-form-group select:focus {
+        border-color: rgb(59, 130, 246); outline: none;
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+      }
+      .aah-modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.5rem; }
       .aah-btn {
-        padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer;
-        font-weight: bold;
+        padding: 0.5rem 1rem; border: none; border-radius: 0.375rem; cursor: pointer;
+        font-weight: 500; font-size: 0.875rem; transition: background-color 0.2s;
       }
-      .aah-btn-primary { background: #007bff; color: white; }
-      .aah-btn-secondary { background: #6c757d; color: white; }
-      
-      /* Floating Button */
-      .aah-fab {
-        position: fixed; bottom: 20px; right: 20px; z-index: 99998;
-        background: #007bff; color: white; border: none; border-radius: 50%;
-        width: 50px; height: 50px; font-size: 24px; cursor: pointer;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center;
-        transition: background 0.2s;
-      }
-      .aah-fab:hover { background: #0056b3; }
+      .aah-btn-primary { background-color: rgb(37, 99, 235); color: white; }
+      .aah-btn-primary:hover { background-color: rgb(29, 78, 216); }
+      .aah-btn-secondary { background-color: rgb(82, 82, 91); color: white; }
+      .aah-btn-secondary:hover { background-color: rgb(63, 63, 70); }
     `;
     document.head.appendChild(style);
   }
 
-  function injectButton() {
-    if (document.getElementById('aah-fab-btn')) return;
-    if (!document.body) {
-      // If body isn't ready yet, wait a bit and try again
-      setTimeout(injectButton, 100);
-      return;
+  function insertSidebarButton() {
+    if (document.getElementById('aah-sidebar-btn')) return true;
+
+    // Anchor to CloudSync button if it exists, otherwise Chat button.
+    // This prevents conflicts and groups extension buttons together.
+    const anchorButton = document.querySelector('button[data-element-id="workspace-tab-cloudsync"]') || 
+                         document.querySelector('button[data-element-id="workspace-tab-chat"]');
+                         
+    if (!anchorButton?.parentNode) return false;
+
+    if (uiObserver) {
+      uiObserver.disconnect();
+      uiObserver = null;
     }
 
     const btn = document.createElement('button');
-    btn.id = 'aah-fab-btn';
-    btn.className = 'aah-fab';
-    btn.innerHTML = '⚡';
-    btn.title = 'Auto Action Hook Settings';
+    btn.id = 'aah-sidebar-btn';
+    btn.setAttribute('data-element-id', 'workspace-tab-auto-action-hook');
+    btn.setAttribute('data-tooltip-id', 'global');
+    btn.setAttribute('data-tooltip-place', 'right');
+    
+    // Copy exact classes from the anchor button to match pinned/expanded state perfectly
+    btn.className = anchorButton.className;
+    
+    const isPinned = anchorButton.classList.contains("w-9") && anchorButton.classList.contains("h-9");
+    if (isPinned) {
+      btn.setAttribute("data-tooltip-content", "Auto Action Hook");
+      btn.innerHTML = `<div class="relative w-4 h-4 flex-shrink-0 flex items-center justify-center text-base">⚡</div>`;
+    } else {
+      btn.innerHTML = `
+        <div class="relative w-4 h-4 flex-shrink-0 flex items-center justify-center text-base">⚡</div>
+        <span class="font-normal mx-auto self-stretch text-center text-xs leading-4 md:leading-none w-full md:w-[51px]" style="hyphens: auto; word-break: break-word;">Hook</span>
+      `;
+    }
+
+    btn.style.cursor = 'pointer';
     btn.onclick = openModal;
-    document.body.appendChild(btn);
-    console.log('[AutoActionHook] Floating button injected successfully.');
+    
+    // Insert right after the anchor button
+    if (anchorButton.nextSibling) {
+      anchorButton.parentNode.insertBefore(btn, anchorButton.nextSibling);
+    } else {
+      anchorButton.parentNode.appendChild(btn);
+    }
+    
+    console.log('[AutoActionHook] Sidebar button injected successfully.');
+    return true;
   }
 
   function openModal() {
@@ -128,8 +158,8 @@
           <input type="text" id="aah-response" placeholder="Yes, approved. Please continue.">
         </div>
         <div class="aah-modal-actions">
-          <button id="aah-save" class="aah-btn aah-btn-primary">Save</button>
           <button id="aah-cancel" class="aah-btn aah-btn-secondary">Cancel</button>
+          <button id="aah-save" class="aah-btn aah-btn-primary">Save</button>
         </div>
       </div>
     `;
@@ -215,13 +245,17 @@
   }
 
   function init() {
-    console.log('[AutoActionHook] Initializing extension core...');
+    console.log('[AutoActionHook] Initializing extension...');
     injectStyles();
-    injectButton(); // Handles waiting for body internally
+    
+    if (!insertSidebarButton()) {
+      uiObserver = new MutationObserver(() => insertSidebarButton());
+      uiObserver.observe(document.body, { childList: true, subtree: true });
+    }
+    
     startObserver();
   }
 
-  // Robust initialization
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
