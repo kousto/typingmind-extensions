@@ -1,10 +1,10 @@
 /**
  * TypingMind Extension: Auto Action Hook
  * Author: CaptainKousto
- * Version: 5.1
+ * Version: 5.2
  */
 
-console.log('[AutoActionHook] Script loaded. Initializing v5.1...');
+console.log('[AutoActionHook] Script loaded. Initializing v5.2...');
 
 (function() {
   'use strict';
@@ -19,6 +19,7 @@ console.log('[AutoActionHook] Script loaded. Initializing v5.1...');
   let settings = loadSettings();
   let observer = null;
   let uiObserver = null;
+  let layoutObserver = null;
 
   function loadSettings() {
     try {
@@ -69,15 +70,51 @@ console.log('[AutoActionHook] Script loaded. Initializing v5.1...');
     btn.setAttribute('data-element-id', 'workspace-tab-auto-action-hook');
     btn.setAttribute('data-tooltip-id', 'global');
     btn.setAttribute('data-tooltip-place', 'right');
-    btn.className = "text-slate-900/70 sm:hover:bg-slate-900/20 dark:text-white/70 sm:dark:hover:bg-white/20 inline-flex rounded-xl px-0.5 py-1.5 flex-col justify-start items-center gap-1.5 flex-1 md:flex-none md:w-full min-w-[58px] md:min-w-0 h-12 md:min-h-[50px] md:h-fit shrink-0 transition-colors cursor-default focus:outline-0";
     btn.style.cursor = "pointer";
-    btn.innerHTML = `
-      <div class="relative w-4 h-4 flex-shrink-0 flex items-center justify-center text-base">⚡</div>
+
+    // Icône SVG Foudre (Lightning Bolt) utilisant currentColor
+    const iconSVG = `<svg class="w-[18px] h-[18px] flex-shrink-0" width="18px" height="18px" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M10.5,1.5L3,9.75h4.5l-1.5,6.75L13.5,8.25H9l1.5-6.75z"></path></svg>`;
+    
+    const expandedHTML = `
+      <div class="relative w-4 h-4 flex-shrink-0">${iconSVG}</div>
       <span class="font-normal mx-auto self-stretch text-center text-xs leading-4 md:leading-none w-full md:w-[51px]" style="hyphens: auto; word-break: break-word;">Hook</span>
     `;
 
+    // Fonction qui copie l'état (pinned/expanded) du bouton Settings natif
+    const renderLikeSettings = () => {
+      const settingsBtn = document.querySelector('button[data-element-id="workspace-tab-settings"]');
+      if (!settingsBtn) return;
+
+      const isPinned = settingsBtn.classList.contains("w-9") && settingsBtn.classList.contains("h-9");
+
+      // Copie des classes dynamiques
+      const classesToExclude = ['active', 'selected'];
+      const filteredClasses = Array.from(settingsBtn.classList).filter(
+        cls => !classesToExclude.includes(cls) && !cls.startsWith('aria-')
+      ).join(' ');
+      btn.className = filteredClasses;
+      btn.style.cursor = "pointer";
+
+      if (isPinned) {
+        btn.setAttribute("data-tooltip-content", "Auto Action Hook");
+        btn.innerHTML = iconSVG;
+      } else {
+        btn.removeAttribute("data-tooltip-content");
+        btn.innerHTML = expandedHTML;
+      }
+    };
+
+    renderLikeSettings();
     btn.onclick = openModal;
     anchorButton.parentNode.insertBefore(btn, anchorButton.nextSibling);
+
+    // Observation du bouton Settings pour adapter le bouton Hook quand la sidebar change de taille
+    const settingsBtn = document.querySelector('button[data-element-id="workspace-tab-settings"]');
+    if (settingsBtn) {
+      layoutObserver = new MutationObserver(renderLikeSettings);
+      layoutObserver.observe(settingsBtn, { attributes: true, attributeFilter: ["class"], childList: true });
+    }
+
     return true;
   }
 
@@ -150,7 +187,6 @@ console.log('[AutoActionHook] Script loaded. Initializing v5.1...');
                            document.querySelector('button[aria-label*="Send"]');
         if (sendButton && !sendButton.disabled) {
           sendButton.click();
-          console.log('[AutoActionHook] Auto-response sent via click.');
         } else {
           const enterEvent = new KeyboardEvent('keydown', {
             key: 'Enter',
@@ -161,19 +197,15 @@ console.log('[AutoActionHook] Script loaded. Initializing v5.1...');
             cancelable: true
           });
           textarea.dispatchEvent(enterEvent);
-          console.log('[AutoActionHook] Auto-response sent via Enter key.');
         }
       }, 200);
     }
   }
 
-  // Nouvelle fonction pour extraire le texte visible sans le bloc de réflexion
   function getActualResponseText(element) {
     const clone = element.cloneNode(true);
     const thinkingBlock = clone.querySelector('[data-element-id="thinking-block"]');
-    if (thinkingBlock) {
-      thinkingBlock.remove();
-    }
+    if (thinkingBlock) thinkingBlock.remove();
     return clone.textContent.trim();
   }
 
@@ -192,12 +224,11 @@ console.log('[AutoActionHook] Script loaded. Initializing v5.1...');
 
     if (lastMsg.dataset.aahProcessed === 'true') return;
 
-    // Utilisation de la nouvelle fonction pour exclure le thinking-block
     const actualText = getActualResponseText(lastMsg);
     
     if (actualText.includes(settings.triggerText)) {
       lastMsg.dataset.aahProcessed = 'true';
-      console.log('[AutoActionHook] Trigger detected in actual response:', settings.triggerText);
+      console.log('[AutoActionHook] Trigger detected:', settings.triggerText);
       setTimeout(triggerAutoResponse, 500);
     }
   }
@@ -205,17 +236,13 @@ console.log('[AutoActionHook] Script loaded. Initializing v5.1...');
   function startObserver() {
     if (observer) observer.disconnect();
 
-    if (settings.approvalMode === 'disabled' || settings.approvalMode === 'manual') {
-      console.log(`[AutoActionHook] ${settings.approvalMode.charAt(0).toUpperCase() + settings.approvalMode.slice(1)} mode active. Observer stopped.`);
-      return;
-    }
+    if (settings.approvalMode === 'disabled' || settings.approvalMode === 'manual') return;
 
     observer = new MutationObserver(() => {
       checkForTrigger();
     });
 
     observer.observe(document.body, { childList: true, subtree: true, characterData: true });
-    console.log('[AutoActionHook] Observer started in', settings.approvalMode, 'mode.');
   }
 
   function init() {
