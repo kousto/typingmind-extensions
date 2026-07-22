@@ -1,13 +1,12 @@
 /**
  * TypingMind Extension: Auto Action Hook
  * Author: CaptainKousto
- * 
- * Adds a button in the sidebar to open a settings modal.
- * Automatically sends a user message when LLM output contains a specific trigger text.
  */
 
 (function() {
   'use strict';
+
+  console.log('[AutoActionHook] Script loaded. Initializing...');
 
   const STORAGE_KEY = 'auto_action_hook_settings';
   const DEFAULT_SETTINGS = {
@@ -18,6 +17,7 @@
 
   let settings = loadSettings();
   let observer = null;
+  let uiObserver = null;
 
   function loadSettings() {
     try {
@@ -35,6 +35,7 @@
     settings = newSettings;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
     startObserver();
+    console.log('[AutoActionHook] Settings saved:', settings);
   }
 
   function injectStyles() {
@@ -46,19 +47,17 @@
         display: flex; align-items: center; justify-content: center;
       }
       .aah-modal {
-        background: var(--tm-background-secondary, #fff);
-        color: var(--tm-text-primary, #000);
+        background: #1f2937; color: #fff;
         padding: 20px; border-radius: 8px; width: 400px; max-width: 90%;
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        font-family: sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       }
       .aah-modal h2 { margin-top: 0; font-size: 1.2rem; }
       .aah-form-group { margin-bottom: 15px; }
       .aah-form-group label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 0.9rem; }
       .aah-form-group input, .aah-form-group select {
-        width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;
-        background: var(--tm-background-primary, #fff);
-        color: var(--tm-text-primary, #000);
+        width: 100%; padding: 8px; border: 1px solid #444; border-radius: 4px;
+        background: #111827; color: #fff;
         box-sizing: border-box;
       }
       .aah-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
@@ -70,30 +69,47 @@
       .aah-btn-secondary { background: #6c757d; color: white; }
       .aah-sidebar-btn {
         margin: 10px; padding: 8px; border-radius: 4px; cursor: pointer;
-        border: 1px solid var(--tm-border, #ccc);
-        background: transparent; color: inherit; width: calc(100% - 20px);
+        border: 1px solid #444;
+        background: #111827; color: #fff; width: calc(100% - 20px);
         text-align: left; display: flex; align-items: center; gap: 8px;
+        font-size: 14px;
       }
+      .aah-sidebar-btn:hover { background: #374151; }
     `;
     document.head.appendChild(style);
   }
 
   function injectSidebarButton() {
-    const sidebar = document.querySelector('[data-element-id="sidebar-bottom-container"]') || 
-                    document.querySelector('[data-element-id="sidebar-container"]');
+    if (document.getElementById('aah-sidebar-btn')) return;
+
+    // Look for the standard aside element used in modern web apps
+    const sidebar = document.querySelector('aside') || 
+                   document.querySelector('[class*="sidebar"]') ||
+                   document.querySelector('[data-element-id="sidebar-container"]');
+                   
     if (!sidebar) {
-      setTimeout(injectSidebarButton, 1000);
+      // Use a MutationObserver to wait for the sidebar to appear
+      if (!uiObserver) {
+        uiObserver = new MutationObserver(() => injectSidebarButton());
+        uiObserver.observe(document.body, { childList: true, subtree: true });
+      }
       return;
     }
 
-    if (document.getElementById('aah-sidebar-btn')) return;
+    // Disconnect the observer once the button is injected
+    if (uiObserver) {
+      uiObserver.disconnect();
+      uiObserver = null;
+    }
 
     const btn = document.createElement('button');
     btn.id = 'aah-sidebar-btn';
     btn.className = 'aah-sidebar-btn';
     btn.innerHTML = '⚡ Auto Action Hook';
     btn.onclick = openModal;
+    
     sidebar.appendChild(btn);
+    console.log('[AutoActionHook] Sidebar button injected.');
   }
 
   function openModal() {
@@ -159,7 +175,8 @@
   }
 
   function triggerAutoResponse() {
-    const textarea = document.querySelector('textarea[data-element-id="chat-input-textarea"]') || document.querySelector('textarea');
+    const textarea = document.querySelector('textarea[data-element-id="chat-input-textarea"]') || 
+                     document.querySelector('textarea');
     if (textarea) {
       setNativeValue(textarea, settings.autoResponseText);
       setTimeout(() => {
@@ -168,6 +185,7 @@
                            document.querySelector('button[type="submit"]');
         if (sendButton) {
           sendButton.click();
+          console.log('[AutoActionHook] Auto-response sent.');
         }
       }, 100);
     }
@@ -204,12 +222,12 @@
   }
 
   function init() {
+    console.log('[AutoActionHook] Initializing extension...');
     injectStyles();
     injectSidebarButton();
     startObserver();
   }
 
-  // Start when DOM is ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
