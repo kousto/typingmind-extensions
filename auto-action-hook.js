@@ -38,7 +38,9 @@
   }
 
   function injectStyles() {
+    if (document.getElementById('aah-styles')) return;
     const style = document.createElement('style');
+    style.id = 'aah-styles';
     style.textContent = `
       .aah-modal-overlay {
         position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -68,12 +70,13 @@
       .aah-btn-primary { background: #007bff; color: white; }
       .aah-btn-secondary { background: #6c757d; color: white; }
       
-      /* Floating Button to guarantee visibility */
+      /* Floating Button */
       .aah-fab {
         position: fixed; bottom: 20px; right: 20px; z-index: 99998;
         background: #007bff; color: white; border: none; border-radius: 50%;
         width: 50px; height: 50px; font-size: 24px; cursor: pointer;
         box-shadow: 0 2px 5px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center;
+        transition: background 0.2s;
       }
       .aah-fab:hover { background: #0056b3; }
     `;
@@ -82,6 +85,11 @@
 
   function injectButton() {
     if (document.getElementById('aah-fab-btn')) return;
+    if (!document.body) {
+      // If body isn't ready yet, wait a bit and try again
+      setTimeout(injectButton, 100);
+      return;
+    }
 
     const btn = document.createElement('button');
     btn.id = 'aah-fab-btn';
@@ -90,7 +98,7 @@
     btn.title = 'Auto Action Hook Settings';
     btn.onclick = openModal;
     document.body.appendChild(btn);
-    console.log('[AutoActionHook] Floating button injected.');
+    console.log('[AutoActionHook] Floating button injected successfully.');
   }
 
   function openModal() {
@@ -167,8 +175,12 @@
         if (sendButton) {
           sendButton.click();
           console.log('[AutoActionHook] Auto-response sent.');
+        } else {
+          console.error('[AutoActionHook] Send button not found!');
         }
       }, 100);
+    } else {
+      console.error('[AutoActionHook] Textarea not found!');
     }
   }
 
@@ -203,25 +215,13 @@
   }
 
   function init() {
-    console.log('[AutoActionHook] Initializing extension...');
+    console.log('[AutoActionHook] Initializing extension core...');
     injectStyles();
-    
-    // Inject button immediately if body is ready, otherwise wait
-    if (document.body) {
-      injectButton();
-    } else {
-      const bodyObserver = new MutationObserver(() => {
-        if (document.body) {
-          injectButton();
-          bodyObserver.disconnect();
-        }
-      });
-      bodyObserver.observe(document.documentElement, { childList: true });
-    }
-    
+    injectButton(); // Handles waiting for body internally
     startObserver();
   }
 
+  // Robust initialization
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
