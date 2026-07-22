@@ -1,10 +1,10 @@
 /**
  * TypingMind Extension: Auto Action Hook
  * Author: CaptainKousto
- * Version: 3.0
+ * Version: 4.0
  */
 
-console.log('[AutoActionHook] Script loaded. Initializing v3.0...');
+console.log('[AutoActionHook] Script loaded. Initializing v4.0...');
 
 (function() {
   'use strict';
@@ -69,12 +69,8 @@ console.log('[AutoActionHook] Script loaded. Initializing v3.0...');
     btn.setAttribute('data-element-id', 'workspace-tab-auto-action-hook');
     btn.setAttribute('data-tooltip-id', 'global');
     btn.setAttribute('data-tooltip-place', 'right');
-    
-    // Copie exacte des classes natives de TypingMind
     btn.className = "text-slate-900/70 sm:hover:bg-slate-900/20 dark:text-white/70 sm:dark:hover:bg-white/20 inline-flex rounded-xl px-0.5 py-1.5 flex-col justify-start items-center gap-1.5 flex-1 md:flex-none md:w-full min-w-[58px] md:min-w-0 h-12 md:min-h-[50px] md:h-fit shrink-0 transition-colors cursor-default focus:outline-0";
     btn.style.cursor = "pointer";
-    
-    // HTML identique au bouton CloudSync
     btn.innerHTML = `
       <div class="relative w-4 h-4 flex-shrink-0 flex items-center justify-center text-base">⚡</div>
       <span class="font-normal mx-auto self-stretch text-center text-xs leading-4 md:leading-none w-full md:w-[51px]" style="hyphens: auto; word-break: break-word;">Hook</span>
@@ -82,8 +78,6 @@ console.log('[AutoActionHook] Script loaded. Initializing v3.0...');
 
     btn.onclick = openModal;
     anchorButton.parentNode.insertBefore(btn, anchorButton.nextSibling);
-    
-    console.log('[AutoActionHook] Sidebar button injected successfully.');
     return true;
   }
 
@@ -93,7 +87,6 @@ console.log('[AutoActionHook] Script loaded. Initializing v3.0...');
     const overlay = document.createElement('div');
     overlay.id = 'aah-modal-overlay';
     overlay.className = 'aah-modal-overlay';
-    
     overlay.innerHTML = `
       <div class="aah-modal">
         <h2>⚡ Auto Action Hook Settings</h2>
@@ -150,34 +143,61 @@ console.log('[AutoActionHook] Script loaded. Initializing v3.0...');
     const textarea = document.querySelector('textarea[data-element-id="chat-input-textarea"]') || document.querySelector('textarea');
     if (textarea) {
       setNativeValue(textarea, settings.autoResponseText);
+      
+      // Utilisation de la touche Entrée pour envoyer le message de manière fiable
       setTimeout(() => {
-        const sendButton = document.querySelector('button[data-element-id="send-chat-message-button"]') || document.querySelector('button[aria-label*="Send"]');
-        if (sendButton) sendButton.click();
-      }, 100);
+        const enterEvent = new KeyboardEvent('keydown', {
+          key: 'Enter',
+          code: 'Enter',
+          keyCode: 13,
+          which: 13,
+          bubbles: true,
+          cancelable: true
+        });
+        textarea.dispatchEvent(enterEvent);
+        console.log('[AutoActionHook] Auto-response sent via Enter key.');
+      }, 150);
+    }
+  }
+
+  function checkForTrigger() {
+    // 1. Ne rien faire si le LLM est encore en train d'écrire (si le bouton Stop est présent)
+    const stopBtn = document.querySelector('button[data-element-id="stop-generating-button"], button[aria-label*="Stop"], button[aria-label*="stop"]');
+    if (stopBtn) return;
+
+    // 2. Trouver le tout dernier message du LLM
+    // TypingMind utilise généralement des classes 'prose' ou 'markdown' pour le contenu des messages
+    const msgContents = document.querySelectorAll('.prose, [class*="markdown-body"], [data-element-id="message-text"]');
+    if (msgContents.length === 0) return;
+
+    const lastMsg = msgContents[msgContents.length - 1];
+    if (!lastMsg) return;
+
+    // 3. Éviter de traiter le même message plusieurs fois
+    if (lastMsg.dataset.aahProcessed) return;
+
+    // 4. Vérifier si le texte contient le déclencheur
+    const text = lastMsg.textContent.trim();
+    if (text.includes(settings.triggerText)) {
+      lastMsg.dataset.aahProcessed = 'true';
+      console.log('[AutoActionHook] Trigger detected in final message:', settings.triggerText);
+      setTimeout(triggerAutoResponse, 500);
     }
   }
 
   function startObserver() {
     if (observer) observer.disconnect();
-    if (settings.approvalMode === 'manual') return;
+    if (settings.approvalMode === 'manual') {
+      console.log('[AutoActionHook] Manual mode active. Observer stopped.');
+      return;
+    }
 
-    observer = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        for (const node of mutation.addedNodes) {
-          if (node.nodeType === 1) {
-            const messages = node.matches('[class*="message"], [class*="assistant"]') ? [node] : node.querySelectorAll('[class*="message"], [class*="assistant"]');
-            messages.forEach(msg => {
-              if (msg.dataset.aahProcessed) return;
-              if (msg.textContent && msg.textContent.includes(settings.triggerText)) {
-                msg.dataset.aahProcessed = 'true';
-                setTimeout(triggerAutoResponse, 500);
-              }
-            });
-          }
-        }
-      }
+    observer = new MutationObserver(() => {
+      checkForTrigger();
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    console.log('[AutoActionHook] Observer started in', settings.approvalMode, 'mode.');
   }
 
   function init() {
