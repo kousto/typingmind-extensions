@@ -10,14 +10,13 @@
 
   const STORAGE_KEY = 'auto_action_hook_settings';
   const DEFAULT_SETTINGS = {
-    approvalMode: 'manual',
+    approvalMode: 'manual', // Defaults to manual. Change to 'auto' or 'ignore' in the UI.
     triggerText: '[NEEDS_APPROVAL]',
     autoResponseText: 'Yes, approved. Please continue.'
   };
 
   let settings = loadSettings();
   let observer = null;
-  let uiObserver = null;
 
   function loadSettings() {
     try {
@@ -43,7 +42,7 @@
     style.textContent = `
       .aah-modal-overlay {
         position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(0, 0, 0, 0.5); z-index: 9999;
+        background: rgba(0, 0, 0, 0.5); z-index: 99999;
         display: flex; align-items: center; justify-content: center;
       }
       .aah-modal {
@@ -51,6 +50,7 @@
         padding: 20px; border-radius: 8px; width: 400px; max-width: 90%;
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        z-index: 100000;
       }
       .aah-modal h2 { margin-top: 0; font-size: 1.2rem; }
       .aah-form-group { margin-bottom: 15px; }
@@ -67,49 +67,30 @@
       }
       .aah-btn-primary { background: #007bff; color: white; }
       .aah-btn-secondary { background: #6c757d; color: white; }
-      .aah-sidebar-btn {
-        margin: 10px; padding: 8px; border-radius: 4px; cursor: pointer;
-        border: 1px solid #444;
-        background: #111827; color: #fff; width: calc(100% - 20px);
-        text-align: left; display: flex; align-items: center; gap: 8px;
-        font-size: 14px;
+      
+      /* Floating Button to guarantee visibility */
+      .aah-fab {
+        position: fixed; bottom: 20px; right: 20px; z-index: 99998;
+        background: #007bff; color: white; border: none; border-radius: 50%;
+        width: 50px; height: 50px; font-size: 24px; cursor: pointer;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center;
       }
-      .aah-sidebar-btn:hover { background: #374151; }
+      .aah-fab:hover { background: #0056b3; }
     `;
     document.head.appendChild(style);
   }
 
-  function injectSidebarButton() {
-    if (document.getElementById('aah-sidebar-btn')) return;
-
-    // Look for the standard aside element used in modern web apps
-    const sidebar = document.querySelector('aside') || 
-                   document.querySelector('[class*="sidebar"]') ||
-                   document.querySelector('[data-element-id="sidebar-container"]');
-                   
-    if (!sidebar) {
-      // Use a MutationObserver to wait for the sidebar to appear
-      if (!uiObserver) {
-        uiObserver = new MutationObserver(() => injectSidebarButton());
-        uiObserver.observe(document.body, { childList: true, subtree: true });
-      }
-      return;
-    }
-
-    // Disconnect the observer once the button is injected
-    if (uiObserver) {
-      uiObserver.disconnect();
-      uiObserver = null;
-    }
+  function injectButton() {
+    if (document.getElementById('aah-fab-btn')) return;
 
     const btn = document.createElement('button');
-    btn.id = 'aah-sidebar-btn';
-    btn.className = 'aah-sidebar-btn';
-    btn.innerHTML = '⚡ Auto Action Hook';
+    btn.id = 'aah-fab-btn';
+    btn.className = 'aah-fab';
+    btn.innerHTML = '⚡';
+    btn.title = 'Auto Action Hook Settings';
     btn.onclick = openModal;
-    
-    sidebar.appendChild(btn);
-    console.log('[AutoActionHook] Sidebar button injected.');
+    document.body.appendChild(btn);
+    console.log('[AutoActionHook] Floating button injected.');
   }
 
   function openModal() {
@@ -224,7 +205,20 @@
   function init() {
     console.log('[AutoActionHook] Initializing extension...');
     injectStyles();
-    injectSidebarButton();
+    
+    // Inject button immediately if body is ready, otherwise wait
+    if (document.body) {
+      injectButton();
+    } else {
+      const bodyObserver = new MutationObserver(() => {
+        if (document.body) {
+          injectButton();
+          bodyObserver.disconnect();
+        }
+      });
+      bodyObserver.observe(document.documentElement, { childList: true });
+    }
+    
     startObserver();
   }
 
