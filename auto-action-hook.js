@@ -1,17 +1,17 @@
 /**
  * TypingMind Extension: Auto Action Hook
  * Author: CaptainKousto
- * Version: 4.0
+ * Version: 5.0
  */
 
-console.log('[AutoActionHook] Script loaded. Initializing v4.0...');
+console.log('[AutoActionHook] Script loaded. Initializing v5.0...');
 
 (function() {
   'use strict';
 
   const STORAGE_KEY = 'auto_action_hook_settings';
   const DEFAULT_SETTINGS = {
-    approvalMode: 'manual',
+    approvalMode: 'disabled', // Defaults to disabled for safety
     triggerText: '[NEEDS_APPROVAL]',
     autoResponseText: 'Yes, approved. Please continue.'
   };
@@ -93,6 +93,7 @@ console.log('[AutoActionHook] Script loaded. Initializing v4.0...');
         <div class="aah-form-group">
           <label>Approval Mode</label>
           <select id="aah-mode">
+            <option value="disabled">Disabled (Hook is turned off)</option>
             <option value="manual">Manual (Pause for each action)</option>
             <option value="auto">Auto (Autonomous, stop if dangerous)</option>
             <option value="ignore">Ignore (Never stop)</option>
@@ -144,51 +145,65 @@ console.log('[AutoActionHook] Script loaded. Initializing v4.0...');
     if (textarea) {
       setNativeValue(textarea, settings.autoResponseText);
       
-      // Utilisation de la touche Entrée pour envoyer le message de manière fiable
       setTimeout(() => {
-        const enterEvent = new KeyboardEvent('keydown', {
-          key: 'Enter',
-          code: 'Enter',
-          keyCode: 13,
-          which: 13,
-          bubbles: true,
-          cancelable: true
-        });
-        textarea.dispatchEvent(enterEvent);
-        console.log('[AutoActionHook] Auto-response sent via Enter key.');
-      }, 150);
+        // Essai 1 : Cliquer sur le bouton d'envoi
+        const sendButton = document.querySelector('button[data-element-id="send-chat-message-button"]') || 
+                           document.querySelector('button[aria-label*="Send"]');
+        if (sendButton && !sendButton.disabled) {
+          sendButton.click();
+          console.log('[AutoActionHook] Auto-response sent via click.');
+        } else {
+          // Essai 2 : Simuler la touche Entrée si le bouton n'est pas trouvé ou désactivé
+          const enterEvent = new KeyboardEvent('keydown', {
+            key: 'Enter',
+            code: 'Enter',
+            keyCode: 13,
+            which: 13,
+            bubbles: true,
+            cancelable: true
+          });
+          textarea.dispatchEvent(enterEvent);
+          console.log('[AutoActionHook] Auto-response sent via Enter key.');
+        }
+      }, 200); // Délai légèrement augmenté pour s'assurer que React a mis à jour l'état du bouton
     }
   }
 
   function checkForTrigger() {
-    // 1. Ne rien faire si le LLM est encore en train d'écrire (si le bouton Stop est présent)
-    const stopBtn = document.querySelector('button[data-element-id="stop-generating-button"], button[aria-label*="Stop"], button[aria-label*="stop"]');
+    // Ne rien faire si le mode est désactivé ou manuel
+    if (settings.approvalMode === 'disabled' || settings.approvalMode === 'manual') return;
+    
+    // Ne rien faire si le texte déclencheur est vide
+    if (!settings.triggerText || settings.triggerText.trim() === '') return;
+
+    // 1. Ne rien faire si le LLM est encore en train d'écrire (bouton Stop visible)
+    const stopBtn = document.querySelector('button[data-element-id="stop-generating-button"]');
     if (stopBtn) return;
 
-    // 2. Trouver le tout dernier message du LLM
-    // TypingMind utilise généralement des classes 'prose' ou 'markdown' pour le contenu des messages
-    const msgContents = document.querySelectorAll('.prose, [class*="markdown-body"], [data-element-id="message-text"]');
-    if (msgContents.length === 0) return;
+    // 2. Cibler EXCLUSIVEMENT les réponses de l'IA (et non les messages utilisateur)
+    const allAiResponses = document.querySelectorAll('[data-element-id="ai-response"]');
+    if (allAiResponses.length === 0) return;
 
-    const lastMsg = msgContents[msgContents.length - 1];
+    // 3. Prendre le tout dernier message de l'IA
+    const lastMsg = allAiResponses[allAiResponses.length - 1];
     if (!lastMsg) return;
 
-    // 3. Éviter de traiter le même message plusieurs fois
-    if (lastMsg.dataset.aahProcessed) return;
+    // 4. Éviter de traiter le même message plusieurs fois
+    if (lastMsg.dataset.aahProcessed === 'true') return;
 
-    // 4. Vérifier si le texte contient le déclencheur
-    const text = lastMsg.textContent.trim();
-    if (text.includes(settings.triggerText)) {
+    // 5. Vérifier si le texte contient le déclencheur
+    if (lastMsg.textContent.includes(settings.triggerText)) {
       lastMsg.dataset.aahProcessed = 'true';
-      console.log('[AutoActionHook] Trigger detected in final message:', settings.triggerText);
+      console.log('[AutoActionHook] Trigger detected:', settings.triggerText);
       setTimeout(triggerAutoResponse, 500);
     }
   }
 
   function startObserver() {
     if (observer) observer.disconnect();
-    if (settings.approvalMode === 'manual') {
-      console.log('[AutoActionHook] Manual mode active. Observer stopped.');
+
+    if (settings.approvalMode === 'disabled' || settings.approvalMode === 'manual') {
+      console.log(`[AutoActionHook] ${settings.approvalMode.charAt(0).toUpperCase() + settings.approvalMode.slice(1)} mode active. Observer stopped.`);
       return;
     }
 
