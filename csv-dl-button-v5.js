@@ -2,11 +2,9 @@
   'use strict';
 
   /* ============================================================
-   * CSV Download Extension for TypingMind — v4
-   * - Sidebar status button (after "Hook") with green dot
-   * - Injects "Download CSV" into code-block header,
-   *   to the LEFT of the "Copy code" button
-   * - No more duplicate buttons
+   * CSV Download Extension for TypingMind — v5
+   * - No duplicate buttons (fixed parent.closest check)
+   * - Button styled exactly like "Copy code" (no green bg)
    * ============================================================ */
 
   var PROCESSED_ATTR = 'data-csv-btn-added';
@@ -171,20 +169,22 @@
     return base + '-' + ts + '.csv';
   }
 
-  /* --- Create download button styled to match "Copy code" button --- */
+  /* --- Create download button with EXACT SAME style as "Copy code" --- */
   function createDownloadButton(csvContent) {
-    var dark = isDarkMode();
     var btn = document.createElement('button');
+    /* These classes are copied from TypingMind's "Copy code" button */
     btn.className = BTN_CLASS + ' '
       + 'rounded-full flex items-center gap-1 '
-      + (dark ? 'dark:bg-emerald-700 dark:hover:bg-emerald-600 dark:text-white' : 'bg-emerald-500 hover:bg-emerald-600 text-white')
-      + ' py-1 px-2.5 text-xs font-light font-sans select-none transition-all';
-    btn.style.cssText = 'cursor:pointer;border:none;outline:none;gap:4px;';
+      + 'dark:bg-gray-900 dark:text-white '
+      + 'py-1 px-2.5 text-xs font-light text-gray-900 font-sans select-none';
+    btn.style.cssText = 'cursor:pointer;gap:4px;';
     btn.innerHTML =
-      '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">' +
-        '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>' +
-        '<polyline points="7 10 12 15 17 10"></polyline>' +
-        '<line x1="12" y1="15" x2="12" y2="3"></line>' +
+      '<svg class="w-3 h-3" width="18px" height="18px" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">' +
+        '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5">' +
+          '<path d="M9 12.5V2.25"></path>' +
+          '<polyline points="5.5 6 9 2.25 12.5 6"></polyline>' +
+          '<path d="M3.25 9v6a.75.75 0 0 0 .75.75h10a.75.75 0 0 0 .75-.75V9"></path>' +
+        '</g>' +
       '</svg>Download CSV';
     btn.addEventListener('click', function(e) {
       e.preventDefault();
@@ -210,11 +210,14 @@
     allPreBlocks.forEach(function(pre) {
       if (pre.querySelector('.' + BTN_CLASS)) return; // already has button
 
-      /* SKIP nested <pre> elements — only process the outermost <pre> */
-      /* If pre.closest('pre') returns a different element, this pre is nested inside another pre */
-      if (pre.closest('pre') !== pre) return;
+      /* ============================================================
+       * FIX: Skip nested <pre> elements
+       * Element.closest() includes the element itself, so we check
+       * the PARENT. If any ancestor <pre> exists, this is a nested pre.
+       * ============================================================ */
+      if (pre.parentElement && pre.parentElement.closest('pre')) return;
 
-      /* Find the <code> element: it may be a direct child, or nested inside an inner <pre><code> */
+      /* Find the <code> element inside */
       var codeEl = pre.querySelector('code');
       if (!codeEl) return;
 
@@ -231,8 +234,8 @@
       var preLang = (pre.getAttribute('data-language') || '').toLowerCase();
       var isPreLangCSV = preLang === 'csv';
 
-      /* Also check the language label in the header */
-      var langLabel = pre.querySelector('.sticky span, .sticky .text-xs');
+      /* Check the language label in the header */
+      var langLabel = pre.querySelector('.sticky span');
       var labelLang = langLabel ? (langLabel.textContent || '').toLowerCase().trim() : '';
       var isLabelCSV = labelLang === 'csv';
 
@@ -240,21 +243,16 @@
 
       if (!isExplicitCSV && !isPreLangCSV && !isLabelCSV && !isContentCSV) return;
 
-      /* Find the code-block header (sticky div containing language + Copy code button) */
+      /* Find the code-block header (sticky div) and the Copy code button */
       var headerDiv = pre.querySelector('.sticky');
       var copyBtn = headerDiv ? headerDiv.querySelector('button') : null;
 
       if (headerDiv && copyBtn) {
-        /* --- Inject into the header, to the LEFT of the "Copy code" button --- */
-        /* Group both buttons in a flex container so they stay together on the right */
-
-        var btn = createDownloadButton(rawText);
-
         /* Check if a button group already exists */
         var existingGroup = copyBtn.parentElement;
         if (existingGroup && existingGroup.getAttribute('data-csv-btn-group') === 'true') {
-          /* Already has a group, just prepend our button */
-          existingGroup.insertBefore(btn, copyBtn);
+          /* Group already exists, just prepend our button */
+          existingGroup.insertBefore(createDownloadButton(rawText), copyBtn);
         } else {
           /* Create a new group: [Download CSV] [Copy code] */
           var btnGroup = document.createElement('div');
@@ -265,16 +263,15 @@
           headerDiv.insertBefore(btnGroup, copyBtn);
           btnGroup.appendChild(copyBtn);
           /* Insert our button before the copy button */
-          btnGroup.insertBefore(btn, copyBtn);
+          btnGroup.insertBefore(createDownloadButton(rawText), copyBtn);
         }
 
         buttonAdded = true;
       } else {
-        /* --- Fallback: insert before the <pre> block --- */
-        var fallbackBtn = createDownloadButton(rawText);
+        /* Fallback: insert before the <pre> block */
         var wrapper = document.createElement('div');
         wrapper.style.cssText = 'display:flex;justify-content:flex-end;margin-bottom:4px;margin-top:8px;';
-        wrapper.appendChild(fallbackBtn);
+        wrapper.appendChild(createDownloadButton(rawText));
         pre.parentNode.insertBefore(wrapper, pre);
         buttonAdded = true;
       }
@@ -296,10 +293,9 @@
             '[data-element-id="additional-actions-of-response-container"]'
           );
           if (actionsContainer && !actionsContainer.querySelector('.' + BTN_CLASS)) {
-            var btn2 = createDownloadButton(plainText);
             var wrapper2 = document.createElement('div');
             wrapper2.style.cssText = 'display:flex;justify-content:flex-end;width:100%;';
-            wrapper2.appendChild(btn2);
+            wrapper2.appendChild(createDownloadButton(plainText));
             actionsContainer.appendChild(wrapper2);
             buttonAdded = true;
           }
@@ -333,7 +329,7 @@
   }
 
   function init() {
-    console.log('[CSV Download Extension v4] Initializing...');
+    console.log('[CSV Download Extension v5] Initializing...');
 
     function tryCreateButton() {
       if (!document.getElementById(STATUS_BTN_ID)) {
@@ -368,7 +364,7 @@
           subtree: true,
           characterData: true
         });
-        console.log('[CSV Download Extension v4] Observing chat area');
+        console.log('[CSV Download Extension v5] Observing chat area');
       } else {
         setTimeout(startObserving, 2000);
       }
