@@ -2,17 +2,18 @@
   'use strict';
 
   /* ============================================================
-   * CSV Download Extension for TypingMind — v3
-   * - Sidebar status button (after "Hook")
-   * - Green dot when CSV detected
-   * - Download CSV button on code blocks
+   * CSV Download Extension for TypingMind — v4
+   * - Sidebar status button (after "Hook") with green dot
+   * - Injects "Download CSV" into code-block header,
+   *   to the LEFT of the "Copy code" button
+   * - No more duplicate buttons
    * ============================================================ */
 
-  const PROCESSED_ATTR = 'data-csv-btn-added';
-  const BTN_CLASS = 'tm-csv-download-btn';
-  const STATUS_BTN_ID = 'tm-csv-status-btn';
-  const STATUS_DOT_ID = 'tm-csv-status-dot';
-  let csvDetectedCount = 0;
+  var PROCESSED_ATTR = 'data-csv-btn-added';
+  var BTN_CLASS = 'tm-csv-download-btn';
+  var STATUS_BTN_ID = 'tm-csv-status-btn';
+  var STATUS_DOT_ID = 'tm-csv-status-dot';
+  var csvDetectedCount = 0;
 
   /* ============================================================
    * PART 1: SIDEBAR STATUS BUTTON
@@ -25,15 +26,12 @@
   function createStatusButton() {
     if (document.getElementById(STATUS_BTN_ID)) return;
 
-    const hookBtn = document.querySelector('[data-element-id="workspace-tab-auto-action-hook"]');
+    var hookBtn = document.querySelector('[data-element-id="workspace-tab-auto-action-hook"]');
     if (!hookBtn) return;
 
-    // Copy the Tailwind classes from Hook button for visual consistency
-    const hookClasses = hookBtn.className;
-
-    const btn = document.createElement('button');
+    var btn = document.createElement('button');
     btn.id = STATUS_BTN_ID;
-    btn.className = hookClasses;
+    btn.className = hookBtn.className;
     btn.setAttribute('data-element-id', 'workspace-tab-csv-status');
     btn.style.cursor = 'pointer';
     btn.innerHTML =
@@ -56,19 +54,17 @@
 
     btn.title = 'CSV Download Extension: ' + csvDetectedCount + ' CSV detected';
 
-    // Click handler: re-scan all responses
     btn.addEventListener('click', function(e) {
       e.preventDefault();
       e.stopPropagation();
       scanAllResponses();
     });
 
-    // Insert AFTER the Hook button
     hookBtn.parentNode.insertBefore(btn, hookBtn.nextSibling);
   }
 
   function updateStatusDot(detected) {
-    const dot = document.getElementById(STATUS_DOT_ID);
+    var dot = document.getElementById(STATUS_DOT_ID);
     if (!dot) return;
 
     if (detected) {
@@ -81,25 +77,23 @@
       dot.style.boxShadow = 'none';
     }
 
-    const btn = document.getElementById(STATUS_BTN_ID);
+    var btn = document.getElementById(STATUS_BTN_ID);
     if (btn) {
       btn.title = 'CSV Download Extension: ' + csvDetectedCount + ' CSV detected — click to re-scan';
     }
   }
 
-  /* Observer to ensure the status button stays in the sidebar */
   function watchForHookButton() {
-    const sidebarObserver = new MutationObserver(function() {
+    var sidebarObserver = new MutationObserver(function() {
       if (!document.getElementById(STATUS_BTN_ID)) {
         createStatusButton();
       }
     });
 
-    const sidebar = document.querySelector('[data-element-id="workspace-bar"]');
+    var sidebar = document.querySelector('[data-element-id="workspace-bar"]');
     if (sidebar) {
       sidebarObserver.observe(sidebar, { childList: true, subtree: true });
     } else {
-      // Retry until sidebar is available
       setTimeout(watchForHookButton, 1000);
     }
   }
@@ -109,21 +103,21 @@
    * ============================================================ */
 
   function looksLikeCSV(text) {
-    const trimmed = text.trim();
+    var trimmed = text.trim();
     if (trimmed.length < 10) return false;
 
-    const lines = trimmed.split('\n').filter(l => l.trim().length > 0);
+    var lines = trimmed.split('\n').filter(function(l) { return l.trim().length > 0; });
     if (lines.length < 2) return false;
 
-    let commaLines = 0, semicolonLines = 0, tabLines = 0;
-    for (const line of lines) {
-      if (line.includes(',')) commaLines++;
-      if (line.includes(';')) semicolonLines++;
-      if (line.includes('\t')) tabLines++;
+    var commaLines = 0, semicolonLines = 0, tabLines = 0;
+    for (var i = 0; i < lines.length; i++) {
+      if (lines[i].indexOf(',') !== -1) commaLines++;
+      if (lines[i].indexOf(';') !== -1) semicolonLines++;
+      if (lines[i].indexOf('\t') !== -1) tabLines++;
     }
 
-    let delimiter = ',';
-    let delimiterLines = commaLines;
+    var delimiter = ',';
+    var delimiterLines = commaLines;
     if (semicolonLines > commaLines && semicolonLines > tabLines) {
       delimiter = ';'; delimiterLines = semicolonLines;
     } else if (tabLines > commaLines && tabLines > semicolonLines) {
@@ -132,9 +126,10 @@
 
     if (delimiterLines / lines.length < 0.5) return false;
 
-    const counts = lines.slice(0, Math.min(5, lines.length)).map(function(line) {
-      let count = 0, inQuotes = false;
-      for (let i = 0; i < line.length; i++) {
+    var sample = lines.slice(0, Math.min(5, lines.length));
+    var counts = sample.map(function(line) {
+      var count = 0, inQuotes = false;
+      for (var i = 0; i < line.length; i++) {
         if (line[i] === '"') inQuotes = !inQuotes;
         if (line[i] === delimiter && !inQuotes) count++;
       }
@@ -176,18 +171,17 @@
     return base + '-' + ts + '.csv';
   }
 
+  /* --- Create download button styled to match "Copy code" button --- */
   function createDownloadButton(csvContent) {
     var dark = isDarkMode();
     var btn = document.createElement('button');
     btn.className = BTN_CLASS + ' '
-      + 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg '
-      + 'text-xs font-medium transition-all cursor-pointer '
-      + (dark
-        ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-        : 'bg-emerald-500 hover:bg-emerald-600 text-white');
-    btn.style.cssText = 'border:none;outline:none;gap:6px;';
+      + 'rounded-full flex items-center gap-1 '
+      + (dark ? 'dark:bg-emerald-700 dark:hover:bg-emerald-600 dark:text-white' : 'bg-emerald-500 hover:bg-emerald-600 text-white')
+      + ' py-1 px-2.5 text-xs font-light font-sans select-none transition-all';
+    btn.style.cssText = 'cursor:pointer;border:none;outline:none;gap:4px;';
     btn.innerHTML =
-      '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">' +
+      '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">' +
         '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>' +
         '<polyline points="7 10 12 15 17 10"></polyline>' +
         '<line x1="12" y1="15" x2="12" y2="3"></line>' +
@@ -210,42 +204,89 @@
 
     var buttonAdded = false;
 
-    // Strategy 1: <pre><code> blocks
-    var preBlocks = aiResponseEl.querySelectorAll('pre');
-    preBlocks.forEach(function(pre) {
-      if (pre.querySelector('.' + BTN_CLASS)) return;
+    /* --- Strategy 1: <pre> code blocks --- */
+    var allPreBlocks = aiResponseEl.querySelectorAll('pre');
 
+    allPreBlocks.forEach(function(pre) {
+      if (pre.querySelector('.' + BTN_CLASS)) return; // already has button
+
+      /* SKIP nested <pre> elements — only process the outermost <pre> */
+      /* If pre.closest('pre') returns a different element, this pre is nested inside another pre */
+      if (pre.closest('pre') !== pre) return;
+
+      /* Find the <code> element: it may be a direct child, or nested inside an inner <pre><code> */
       var codeEl = pre.querySelector('code');
       if (!codeEl) return;
 
       var rawText = codeEl.textContent || '';
       if (!rawText.trim()) return;
 
-      var langClass = Array.from(codeEl.classList).find(function(c) {
-        return c.indexOf('language-') === 0;
+      /* Check explicit CSV language */
+      var langClass = null;
+      codeEl.classList.forEach(function(c) {
+        if (c.indexOf('language-') === 0) langClass = c;
       });
       var isExplicitCSV = langClass === 'language-csv';
+
       var preLang = (pre.getAttribute('data-language') || '').toLowerCase();
       var isPreLangCSV = preLang === 'csv';
+
+      /* Also check the language label in the header */
+      var langLabel = pre.querySelector('.sticky span, .sticky .text-xs');
+      var labelLang = langLabel ? (langLabel.textContent || '').toLowerCase().trim() : '';
+      var isLabelCSV = labelLang === 'csv';
+
       var isContentCSV = looksLikeCSV(rawText);
 
-      if (!isExplicitCSV && !isPreLangCSV && !isContentCSV) return;
+      if (!isExplicitCSV && !isPreLangCSV && !isLabelCSV && !isContentCSV) return;
 
-      var btn = createDownloadButton(rawText);
-      var wrapper = document.createElement('div');
-      wrapper.style.cssText = 'display:flex;justify-content:flex-end;margin-bottom:4px;margin-top:8px;';
-      wrapper.appendChild(btn);
-      pre.parentNode.insertBefore(wrapper, pre);
+      /* Find the code-block header (sticky div containing language + Copy code button) */
+      var headerDiv = pre.querySelector('.sticky');
+      var copyBtn = headerDiv ? headerDiv.querySelector('button') : null;
 
-      buttonAdded = true;
+      if (headerDiv && copyBtn) {
+        /* --- Inject into the header, to the LEFT of the "Copy code" button --- */
+        /* Group both buttons in a flex container so they stay together on the right */
+
+        var btn = createDownloadButton(rawText);
+
+        /* Check if a button group already exists */
+        var existingGroup = copyBtn.parentElement;
+        if (existingGroup && existingGroup.getAttribute('data-csv-btn-group') === 'true') {
+          /* Already has a group, just prepend our button */
+          existingGroup.insertBefore(btn, copyBtn);
+        } else {
+          /* Create a new group: [Download CSV] [Copy code] */
+          var btnGroup = document.createElement('div');
+          btnGroup.className = 'flex items-center gap-1';
+          btnGroup.setAttribute('data-csv-btn-group', 'true');
+
+          /* Move the copy button into the group */
+          headerDiv.insertBefore(btnGroup, copyBtn);
+          btnGroup.appendChild(copyBtn);
+          /* Insert our button before the copy button */
+          btnGroup.insertBefore(btn, copyBtn);
+        }
+
+        buttonAdded = true;
+      } else {
+        /* --- Fallback: insert before the <pre> block --- */
+        var fallbackBtn = createDownloadButton(rawText);
+        var wrapper = document.createElement('div');
+        wrapper.style.cssText = 'display:flex;justify-content:flex-end;margin-bottom:4px;margin-top:8px;';
+        wrapper.appendChild(fallbackBtn);
+        pre.parentNode.insertBefore(wrapper, pre);
+        buttonAdded = true;
+      }
     });
 
-    // Strategy 2: plain text CSV (no code block)
+    /* --- Strategy 2: plain text CSV (no code block) --- */
     if (!buttonAdded) {
       var clone = aiResponseEl.cloneNode(true);
       var thinking = clone.querySelector('[data-element-id="thinking-block"]');
       if (thinking) thinking.remove();
       clone.querySelectorAll('pre').forEach(function(p) { p.remove(); });
+      clone.querySelectorAll('table').forEach(function(t) { t.remove(); });
 
       var plainText = (clone.textContent || '').trim();
       if (looksLikeCSV(plainText) && plainText.length > 20) {
@@ -255,11 +296,11 @@
             '[data-element-id="additional-actions-of-response-container"]'
           );
           if (actionsContainer && !actionsContainer.querySelector('.' + BTN_CLASS)) {
-            var btn = createDownloadButton(plainText);
-            var wrapper = document.createElement('div');
-            wrapper.style.cssText = 'display:flex;justify-content:flex-end;width:100%;';
-            wrapper.appendChild(btn);
-            actionsContainer.appendChild(wrapper);
+            var btn2 = createDownloadButton(plainText);
+            var wrapper2 = document.createElement('div');
+            wrapper2.style.cssText = 'display:flex;justify-content:flex-end;width:100%;';
+            wrapper2.appendChild(btn2);
+            actionsContainer.appendChild(wrapper2);
             buttonAdded = true;
           }
         }
@@ -267,10 +308,8 @@
     }
 
     if (buttonAdded) {
-      // Light up the green dot!
       updateStatusDot(true);
     } else {
-      // Remove processed flag so we can retry
       aiResponseEl.removeAttribute(PROCESSED_ATTR);
     }
   }
@@ -294,9 +333,8 @@
   }
 
   function init() {
-    console.log('[CSV Download Extension v3] Initializing...');
+    console.log('[CSV Download Extension v4] Initializing...');
 
-    // 1) Inject sidebar status button
     function tryCreateButton() {
       if (!document.getElementById(STATUS_BTN_ID)) {
         createStatusButton();
@@ -308,7 +346,6 @@
     tryCreateButton();
     watchForHookButton();
 
-    // 2) Observe chat area for AI responses
     var observer = new MutationObserver(function(mutations) {
       var shouldScan = false;
       for (var i = 0; i < mutations.length; i++) {
@@ -331,15 +368,13 @@
           subtree: true,
           characterData: true
         });
-        console.log('[CSV Download Extension v3] Observing chat area');
+        console.log('[CSV Download Extension v4] Observing chat area');
       } else {
         setTimeout(startObserving, 2000);
       }
     }
 
     startObserving();
-
-    // 3) Initial scan + periodic safety net
     setTimeout(scanAllResponses, 1500);
     setInterval(scanAllResponses, 5000);
   }
